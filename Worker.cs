@@ -1,15 +1,20 @@
 using SistemaOpiniones.ETL.Extractors;
+using SistemaOpiniones.ETL.Services;
 
 namespace SistemaOpiniones.ETL;
 
 public class Worker : BackgroundService
 {
     private readonly IEnumerable<IExtractor> _extractors;
+    private readonly DataLoader _loader;
     private readonly ILogger<Worker> _logger;
 
-    public Worker(IEnumerable<IExtractor> extractors, ILogger<Worker> logger)
+    public Worker(IEnumerable<IExtractor> extractors,
+                  DataLoader loader,
+                  ILogger<Worker> logger)
     {
         _extractors = extractors;
+        _loader = loader;
         _logger = logger;
     }
 
@@ -18,15 +23,18 @@ public class Worker : BackgroundService
         _logger.LogInformation("ETL iniciado: {Hora}", DateTime.Now);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
-        // Ejecutar ambos extractores en paralelo
+        // ?? E: Extracción ????????????????????????????????????????????????????
         var tareas = _extractors.Select(e => e.ExtraerAsync(ct));
         var resultados = await Task.WhenAll(tareas);
         var todos = resultados.SelectMany(r => r).ToList();
 
-        _logger.LogInformation("Extracción completa: {N} opiniones en {Ms}ms",
+        _logger.LogInformation("Extracción completa: {N} registros en {Ms}ms",
                                todos.Count, sw.ElapsedMilliseconds);
 
-        // Aquí los datos quedan listos en memoria (staging)
-        // La fase T y L viene en la siguiente práctica
+        // ?? L: Carga al DW ???????????????????????????????????????????????????
+        var jobId = $"ETL-{DateTime.Now:yyyyMMdd-HHmmss}";
+        await _loader.CargarAsync(todos, jobId, ct);
+
+        _logger.LogInformation("ETL finalizado en {Ms}ms total", sw.ElapsedMilliseconds);
     }
 }
